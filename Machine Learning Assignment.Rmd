@@ -1,0 +1,116 @@
+---
+title: "MachineLearning_Assignment"
+author: "Ravi Salagame"
+date: "April 8, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+   This project is about analysis and predictive modeling to classify weightlifting exercises. The predictive modeling is performed using machine learning algorithms such as random forests. Just as any analysis needs to be validated, this analysis is also validated using error criteria. The final model built with this confidence is used to predict or classify 20 additional data points. 
+   
+## Background 
+   
+  This activity involves 4 steps - a) Pre-processing of the data including choosing variables  b) Splitting of the data into training and testing sets c) Model Fitting and d) cross-validation and error assessment to finalize the model
+  
+  We will predict the correctness of exercise which is classified into 5 factors - A, B, C, D and E. The data includes various factors used in measurement using accelerometers some of which may not be useful for prediction. We will not use them in the model.
+  
+## Step 1 - Pre-processing of the data
+
+First download and read the training and test files. Remove columns with too much of blank or NA strings. 
+
+```{r}
+library(caret)
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "./pml-training.csv")
+#download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "./pml-testing.csv")
+train_orig<-read.csv("pml-training.csv", header=TRUE,na.strings=c("", "NA","NULL"))
+test_orig<-read.csv("pml-testing.csv", header=TRUE,na.strings=c("", "NA","NULL"))
+dim(train_orig)
+train_mod<-train_orig[,colSums(is.na(train_orig))== 0]
+```
+
+The data has a few variables such as user_name which don't contribute to the outcome variable classE. Let us remove them.
+
+```{r}
+remove = c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')
+train <- train_mod[, -which(names(train_mod) %in% remove)]
+dim(train)
+```
+
+Let us now remove variables with high correlations.
+
+```{r}
+corMat<-cor(na.omit(train[sapply(train,is.numeric)]))
+dim(corMat)
+```
+
+There are 52 variables in all. Let us plot them with correlations.
+
+```{r}
+corDF<-expand.grid(row=1:52,col=1:52)
+corDF$correlation<-as.vector(corMat)
+levelplot(correlation~row+ col, corDF)
+```
+
+Now we will find variables with 90 % or more correlations and remove them from the list
+
+```{r}
+rmCor = findCorrelation(corMat, cutoff = .90, verbose = TRUE)
+train_final = train[,-rmCor]
+dim(train_final)
+```
+
+This leaves us with 46 variables for consideration. Now let us split the training data into training and test data
+
+## Step 2 : Split data into training and test data
+
+```{r}
+train1<-createDataPartition(y=train_final$classe,p=0.7,list=FALSE)
+train_data<-train_final[train1,]
+test_data<-train_final[-train1,]
+print("size of training data")
+dim(train_data)
+print("size of testing data")
+dim(test_data)
+```
+
+## Step 3 : Model Fitting
+
+ First, we will study importance of variables using randomForest function by plotting accuracy graphs as below.
+
+```{r}
+library(randomForest)
+fit_Model <- randomForest(classe~., data=train_data, importance=TRUE, ntree=100)
+varImpPlot(fit_Model,font=1,pch=1)
+```
+
+If we are able to get a god fit with fewer variables which are of consequence, it is better than using all the 46 variables. However, we will try our fit with all the variables. We will use randomforest method.
+
+```{r}
+model<-randomForest(classe~.,data=train_data, method='class')
+pred<-predict(model,test_data,type='class')
+z=confusionMatrix(pred,test_data$classe)
+z$table
+```
+
+## Step 4 : Cross Validation and Out of sample errors
+
+Now we can calculate out of sample error with testing data.
+
+```{r}
+
+predMatrix<-with(test_data,table(pred,classe))
+sum(diag(predMatrix))/sum(as.vector(predMatrix))
+```
+The data thus shows good error estimates. We could have studied the variables and reduced the number of variables, but we chose to keep all the variables which means, model could be slightly overfit.
+
+## Prediction of Final Data Set
+
+```{r}
+ans<-predict(model,test_orig)
+ans
+```
